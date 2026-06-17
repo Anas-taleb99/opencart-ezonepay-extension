@@ -4,6 +4,7 @@ namespace Opencart\Catalog\Controller\Extension\Ezonepay\Payment;
 class Ezonepay extends \Opencart\System\Engine\Controller {
 	private const DEV_BASE_URL = 'https://test.ezonepay.ly';
 	private const PRODUCTION_BASE_URL = 'https://api.ezonepay.ly';
+	private const COMPLETING_RECOVERY_SECONDS = 120;
 	private const DEFAULT_CUSTOMER = [
 		'FirstName' => 'OpenCart',
 		'LastName' => 'Customer',
@@ -120,7 +121,7 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 			} elseif (in_array($payment['state'], ['paid', 'used'], true)) {
 				$json = $this->completeOrder($order_info, $payment);
 			} elseif ($payment['state'] === 'completing') {
-				$json = ['status' => 'pending'];
+				$json = $this->currentPaymentStateResponse($order_info, $payment_id);
 			} else {
 				try {
 					$json = $this->verifyPayment($order_info, $payment);
@@ -577,9 +578,30 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 			if ($current['state'] === 'used') {
 				return $this->paidResponse();
 			}
+
+			if ($current['state'] === 'completing') {
+				if ((int)$order_info['order_status_id'] === (int)$this->config->get('payment_ezonepay_paid_status_id')) {
+					$this->finishPaymentCompletion($payment_id);
+
+					return $this->paidResponse();
+				}
+
+				if ($this->isCompletingStale($current)) {
+					$this->rollbackPaymentCompletion($payment_id);
+					$current['state'] = 'paid';
+
+					return $this->completeOrder($order_info, $current);
+				}
+			}
 		}
 
 		return ['status' => 'pending'];
+	}
+
+	private function isCompletingStale(array $payment): bool {
+		$date_modified = strtotime((string)($payment['date_modified'] ?? ''));
+
+		return $date_modified !== false && $date_modified <= time() - self::COMPLETING_RECOVERY_SECONDS;
 	}
 
 	private function paidResponse(): array {
