@@ -2,7 +2,6 @@
   data-create-url="{{ create }}"
   data-status-url="{{ status }}"
   data-token="{{ token }}"
-  data-qr-base="{{ qr_base }}"
   data-text-waiting="{{ text_waiting }}"
   data-text-paid="{{ text_paid }}"
   data-error-timeout="{{ error_timeout }}">
@@ -31,4 +30,5 @@
     <button type="button" id="button-confirm" class="btn btn-primary">{{ button_pay }}</button>
   </div>
 </fieldset>
-<script src="extension/ezonepay/catalog/view/javascript/ezonepay.js?v=4" type="text/javascript"></script>
+<script src="extension/ezonepay/catalog/view/javascript/vendor/qrcode.js?v=1" type="text/javascript"></script>
+<script src="extension/ezonepay/catalog/view/javascript/ezonepay.js?v=5" type="text/javascript"></script>

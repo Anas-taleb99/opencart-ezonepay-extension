@@ -16,7 +16,6 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 
 		$data['create'] = $this->url->link('extension/ezonepay/payment/ezonepay.create', 'language=' . $this->config->get('config_language'), true);
 		$data['status'] = $this->url->link('extension/ezonepay/payment/ezonepay.status', 'language=' . $this->config->get('config_language'), true);
-		$data['qr_base'] = '';
 		$data['token'] = $this->csrfToken();
 
 		return $this->load->view('extension/ezonepay/payment/ezonepay', $data);

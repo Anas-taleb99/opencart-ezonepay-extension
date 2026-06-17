@@ -46,7 +46,7 @@
     function setQr(elements, link) {
         var wrapper = elements.qr.closest('.col-md-auto');
 
-        if (!elements.root.dataset.qrBase) {
+        if (typeof window.qrcode !== 'function') {
             if (wrapper) {
                 wrapper.classList.add('d-none');
             }
@@ -59,7 +59,10 @@
             wrapper.classList.remove('d-none');
         }
 
-        elements.qr.src = elements.root.dataset.qrBase + encodeURIComponent(link);
+        var qr = window.qrcode(0, 'M');
+        qr.addData(link);
+        qr.make();
+        elements.qr.src = qr.createDataURL(8, 8);
     }
 
     function post(url, data) {
