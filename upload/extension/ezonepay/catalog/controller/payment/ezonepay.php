@@ -35,6 +35,13 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 			} else {
 				try {
 					$amount = $this->orderAmount($order_info);
+
+					if ($amount <= 0) {
+						$json['error'] = $this->language->get('error_amount');
+						$this->sendJson($json);
+						return;
+					}
+
 					$order_reference = $this->generateReference((int)$order_info['order_id']);
 
 					$body = [
@@ -75,8 +82,7 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 			}
 		}
 
-		$this->response->addHeader('Content-Type: application/json');
-		$this->response->setOutput(json_encode($json));
+		$this->sendJson($json);
 	}
 
 	public function status(): void {
@@ -110,8 +116,7 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 			}
 		}
 
-		$this->response->addHeader('Content-Type: application/json');
-		$this->response->setOutput(json_encode($json));
+		$this->sendJson($json);
 	}
 
 	private function getValidatedOrder(array &$json, bool $require_enabled = true): array {
@@ -475,7 +480,7 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 	}
 
 	private function amountMatches(float $paid_amount, float $expected_amount): bool {
-		return abs($paid_amount - $expected_amount) <= 0.01;
+		return $paid_amount > 0 && $expected_amount > 0 && abs($paid_amount - $expected_amount) <= 0.01;
 	}
 
 	private function toFloat($value): float {
@@ -523,6 +528,11 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 			'status' => 'paid',
 			'redirect' => $this->url->link('checkout/success', 'language=' . $this->config->get('config_language'), true)
 		];
+	}
+
+	private function sendJson(array $json): void {
+		$this->response->addHeader('Content-Type: application/json');
+		$this->response->setOutput(json_encode($json));
 	}
 
 	private function logApiError(string $message): void {

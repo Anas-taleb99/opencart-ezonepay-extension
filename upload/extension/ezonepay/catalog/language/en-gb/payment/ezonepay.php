@@ -23,6 +23,7 @@ $_['error_payment_method'] = 'Ezone Pay is not the selected payment method!';
 $_['error_config']         = 'Ezone Pay is not configured. Please contact store support.';
 $_['error_api']            = 'Ezone Pay request failed. Please try again or contact support.';
 $_['error_link']           = 'Ezone Pay did not return a payment link.';
+$_['error_amount']         = 'Ezone Pay requires an order total greater than zero.';
 $_['error_timeout']        = 'Ezone Pay payment was not confirmed in time.';
 $_['error_reference']      = 'Ezone Pay payment link does not match this order.';
 $_['error_payment']        = 'Ezone Pay payment could not be verified.';
