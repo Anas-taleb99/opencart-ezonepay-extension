@@ -370,17 +370,43 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 	}
 
 	private function customerPayload(array $order_info): array {
-		$telephone = $order_info['telephone'] ?? '';
+		return [
+			'FirstName' => $this->firstFilled([
+				$this->session->data['customer']['firstname'] ?? '',
+				$this->session->data['payment_address']['firstname'] ?? '',
+				$this->session->data['shipping_address']['firstname'] ?? '',
+				$order_info['firstname'] ?? '',
+				$order_info['payment_firstname'] ?? '',
+				$order_info['shipping_firstname'] ?? '',
+				self::DEFAULT_CUSTOMER['FirstName']
+			]),
+			'LastName' => $this->firstFilled([
+				$this->session->data['customer']['lastname'] ?? '',
+				$this->session->data['payment_address']['lastname'] ?? '',
+				$this->session->data['shipping_address']['lastname'] ?? '',
+				$order_info['lastname'] ?? '',
+				$order_info['payment_lastname'] ?? '',
+				$order_info['shipping_lastname'] ?? '',
+				self::DEFAULT_CUSTOMER['LastName']
+			]),
+			'PhoneNumber' => $this->firstFilled([
+				$this->session->data['customer']['telephone'] ?? '',
+				$order_info['telephone'] ?? '',
+				self::DEFAULT_CUSTOMER['PhoneNumber']
+			])
+		];
+	}
 
-		if (!$telephone) {
-			return self::DEFAULT_CUSTOMER;
+	private function firstFilled(array $values): string {
+		foreach ($values as $value) {
+			$value = trim((string)$value);
+
+			if ($value !== '') {
+				return $value;
+			}
 		}
 
-		return [
-			'FirstName' => $order_info['firstname'] ?: self::DEFAULT_CUSTOMER['FirstName'],
-			'LastName' => $order_info['lastname'] ?: self::DEFAULT_CUSTOMER['LastName'],
-			'PhoneNumber' => $telephone
-		];
+		return '';
 	}
 
 	private function baseUrl(): string {
