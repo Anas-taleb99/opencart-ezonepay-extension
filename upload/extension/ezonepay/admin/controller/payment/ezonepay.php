@@ -123,7 +123,7 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 			`date_added` DATETIME NOT NULL,
 			`date_modified` DATETIME NOT NULL,
 			PRIMARY KEY (`ezonepay_payment_id`),
-			KEY `order_id` (`order_id`),
+			UNIQUE KEY `order_id` (`order_id`),
 			KEY `order_reference` (`order_reference`),
 			KEY `payment_link_id` (`payment_link_id`),
 			KEY `state` (`state`)

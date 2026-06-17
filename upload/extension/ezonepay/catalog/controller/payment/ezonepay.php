@@ -29,56 +29,70 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 		$order_info = $this->getValidatedOrder($json);
 
 		if (!$json && $order_info) {
-			$existing = $this->getReusablePayment((int)$order_info['order_id']);
+			$lock_name = $this->orderLockName((int)$order_info['order_id']);
 
-			if ($existing) {
-				$json = $this->paymentResponse($existing);
+			if (!$this->acquireOrderLock($lock_name)) {
+				$json['error'] = $this->language->get('error_payment');
 			} else {
 				try {
-					$amount = $this->orderAmount($order_info);
+					$existing = $this->getLatestPaymentForOrder((int)$order_info['order_id']);
 
-					if ($amount <= 0) {
-						$json['error'] = $this->language->get('error_amount');
-						$this->sendJson($json);
-						return;
-					}
-
-					$order_reference = $this->generateReference((int)$order_info['order_id']);
-
-					$body = [
-						'Title' => 'OpenCart order payment',
-						'OrderReference' => $order_reference,
-						'InternalReference' => $order_reference,
-						'IsUniqueOrderReference' => true,
-						'Amount' => $amount,
-						'MaxUsageCount' => 1,
-						'Note' => 'OpenCart order #' . (int)$order_info['order_id'] . ' ' . $order_reference,
-						'Customer' => $this->customerPayload($order_info)
-					];
-
-					$data = $this->apiRequest('post', '/payment-link/new', ['json' => $body]);
-					$link = $data['link'] ?? $data['Link'] ?? '';
-
-					if (!$link) {
-						$json['error'] = $this->language->get('error_link');
+					if ($existing && $existing['state'] === 'pending' && $existing['payment_link']) {
+						$json = $this->paymentResponse($existing);
+					} elseif ($existing && in_array($existing['state'], ['paid', 'used', 'completing'], true)) {
+						$json = $this->currentPaymentStateResponse($order_info, (int)$existing['ezonepay_payment_id']);
 					} else {
-						$payment_link_id = (string)($data['id'] ?? $data['Id'] ?? '');
-						$payment_id = $this->addPayment($order_info, $order_reference, $payment_link_id, $link, $amount);
+						try {
+							$amount = $this->orderAmount($order_info);
 
-						$this->addPendingHistory($order_info, $order_reference);
+							if ($amount <= 0) {
+								$json['error'] = $this->language->get('error_amount');
+								$this->sendJson($json);
+								return;
+							}
 
-						$json = [
-							'ezonepay_payment_id' => $payment_id,
-							'order_reference' => $order_reference,
-							'payment_link_id' => $payment_link_id,
-							'link' => $link,
-							'amount' => $this->currency->format($amount, $order_info['currency_code'], 1),
-							'status' => 'pending'
-						];
+							$order_reference = $this->generateReference((int)$order_info['order_id']);
+
+							$body = [
+								'Title' => 'OpenCart order payment',
+								'OrderReference' => $order_reference,
+								'InternalReference' => $order_reference,
+								'IsUniqueOrderReference' => true,
+								'Amount' => $amount,
+								'MaxUsageCount' => 1,
+								'Note' => 'OpenCart order #' . (int)$order_info['order_id'] . ' ' . $order_reference,
+								'Customer' => $this->customerPayload($order_info)
+							];
+
+							$data = $this->apiRequest('post', '/payment-link/new', ['json' => $body]);
+							$link = $data['link'] ?? $data['Link'] ?? '';
+
+							if (!$link) {
+								$json['error'] = $this->language->get('error_link');
+							} else {
+								$payment_link_id = (string)($data['id'] ?? $data['Id'] ?? '');
+								$payment_id = $this->addPayment($order_info, $order_reference, $payment_link_id, $link, $amount);
+								$payment = $this->getPayment($payment_id);
+
+								if (!$payment || (int)$payment['order_id'] !== (int)$order_info['order_id']) {
+									$json['error'] = $this->language->get('error_payment');
+								} elseif ($payment['state'] === 'pending') {
+									if ($payment['order_reference'] === $order_reference) {
+										$this->addPendingHistory($order_info, $order_reference);
+									}
+
+									$json = $this->paymentResponse($payment);
+								} else {
+									$json = $this->currentPaymentStateResponse($order_info, (int)$payment['ezonepay_payment_id']);
+								}
+							}
+						} catch (\Throwable $e) {
+							$this->logApiError($e->getMessage());
+							$json['error'] = $this->language->get('error_api');
+						}
 					}
-				} catch (\Throwable $e) {
-					$this->logApiError($e->getMessage());
-					$json['error'] = $this->language->get('error_api');
+				} finally {
+					$this->releaseOrderLock($lock_name);
 				}
 			}
 		}
@@ -174,8 +188,8 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 		return $expected !== '' && $actual !== '' && hash_equals($expected, $actual);
 	}
 
-	private function getReusablePayment(int $order_id): array {
-		$query = $this->db->query("SELECT * FROM `" . DB_PREFIX . "ezonepay_payment` WHERE `order_id` = '" . (int)$order_id . "' AND `state` = 'pending' AND `payment_link` != '' ORDER BY `ezonepay_payment_id` DESC LIMIT 1");
+	private function getLatestPaymentForOrder(int $order_id): array {
+		$query = $this->db->query("SELECT * FROM `" . DB_PREFIX . "ezonepay_payment` WHERE `order_id` = '" . (int)$order_id . "' ORDER BY `ezonepay_payment_id` DESC LIMIT 1");
 
 		return $query->row;
 	}
@@ -186,8 +200,32 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 		return $query->row;
 	}
 
+	private function orderLockName(int $order_id): string {
+		return 'ezonepay_order_' . $order_id;
+	}
+
+	private function acquireOrderLock(string $lock_name): bool {
+		$query = $this->db->query("SELECT GET_LOCK('" . $this->db->escape($lock_name) . "', 10) AS `locked`");
+
+		return isset($query->row['locked']) && (int)$query->row['locked'] === 1;
+	}
+
+	private function releaseOrderLock(string $lock_name): void {
+		$this->db->query("DO RELEASE_LOCK('" . $this->db->escape($lock_name) . "')");
+	}
+
 	private function addPayment(array $order_info, string $order_reference, string $payment_link_id, string $link, float $amount): int {
-		$this->db->query("INSERT INTO `" . DB_PREFIX . "ezonepay_payment` SET `order_id` = '" . (int)$order_info['order_id'] . "', `order_reference` = '" . $this->db->escape($order_reference) . "', `payment_link_id` = '" . $this->db->escape($payment_link_id) . "', `payment_link` = '" . $this->db->escape($link) . "', `amount` = '" . (float)$amount . "', `currency_code` = '" . $this->db->escape($order_info['currency_code']) . "', `state` = 'pending', `date_added` = NOW(), `date_modified` = NOW()");
+		try {
+			$this->db->query("INSERT INTO `" . DB_PREFIX . "ezonepay_payment` SET `order_id` = '" . (int)$order_info['order_id'] . "', `order_reference` = '" . $this->db->escape($order_reference) . "', `payment_link_id` = '" . $this->db->escape($payment_link_id) . "', `payment_link` = '" . $this->db->escape($link) . "', `amount` = '" . (float)$amount . "', `currency_code` = '" . $this->db->escape($order_info['currency_code']) . "', `state` = 'pending', `date_added` = NOW(), `date_modified` = NOW()");
+		} catch (\Throwable $e) {
+			$existing = $this->getLatestPaymentForOrder((int)$order_info['order_id']);
+
+			if ($existing) {
+				return (int)$existing['ezonepay_payment_id'];
+			}
+
+			throw $e;
+		}
 
 		return (int)$this->db->getLastId();
 	}
