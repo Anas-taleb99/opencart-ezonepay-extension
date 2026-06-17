@@ -38,7 +38,7 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 			'payment_ezonepay_dev_api_key' => '',
 			'payment_ezonepay_production_api_key' => '',
 			'payment_ezonepay_pending_status_id' => $this->defaultPendingStatusId(),
-			'payment_ezonepay_paid_status_id' => (int)$this->config->get('config_complete_status_id'),
+			'payment_ezonepay_paid_status_id' => $this->defaultPaidStatusId(),
 			'payment_ezonepay_geo_zone_id' => 0,
 			'payment_ezonepay_debug' => 0,
 			'payment_ezonepay_status' => 0,
@@ -81,7 +81,7 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 		}
 
 		$pending_status_id = (int)($this->request->post['payment_ezonepay_pending_status_id'] ?? $this->defaultPendingStatusId());
-		$paid_status_id = (int)($this->request->post['payment_ezonepay_paid_status_id'] ?? $this->config->get('config_complete_status_id'));
+		$paid_status_id = (int)($this->request->post['payment_ezonepay_paid_status_id'] ?? $this->defaultPaidStatusId());
 
 		if ($pending_status_id === $paid_status_id) {
 			$json['error']['warning'] = $this->language->get('error_statuses');
@@ -134,7 +134,7 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 		$this->model_setting_setting->editSetting('payment_ezonepay', [
 			'payment_ezonepay_api_mode' => 'dev',
 			'payment_ezonepay_pending_status_id' => $this->defaultPendingStatusId(),
-			'payment_ezonepay_paid_status_id' => (int)$this->config->get('config_complete_status_id'),
+			'payment_ezonepay_paid_status_id' => $this->defaultPaidStatusId(),
 			'payment_ezonepay_geo_zone_id' => 0,
 			'payment_ezonepay_debug' => 0,
 			'payment_ezonepay_status' => 0,
@@ -150,5 +150,11 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 		$status_id = (int)$this->config->get('config_pending_status_id');
 
 		return $status_id ?: 1;
+	}
+
+	private function defaultPaidStatusId(): int {
+		$status_id = (int)$this->config->get('config_complete_status_id');
+
+		return $status_id ?: 5;
 	}
 }
