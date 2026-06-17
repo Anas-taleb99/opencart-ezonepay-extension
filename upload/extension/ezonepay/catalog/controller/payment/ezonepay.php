@@ -68,7 +68,7 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 							$data = $this->apiRequest('post', '/payment-link/new', ['json' => $body]);
 							$link = $data['link'] ?? $data['Link'] ?? '';
 
-							if (!$link) {
+							if (!$this->isSecurePaymentLink($link)) {
 								$json['error'] = $this->language->get('error_link');
 							} else {
 								$payment_link_id = (string)($data['id'] ?? $data['Id'] ?? '');
@@ -545,6 +545,10 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 
 	private function toFloat($value): float {
 		return is_numeric($value) ? (float)$value : 0.0;
+	}
+
+	private function isSecurePaymentLink(string $link): bool {
+		return (bool)filter_var($link, FILTER_VALIDATE_URL) && strtolower((string)parse_url($link, PHP_URL_SCHEME)) === 'https';
 	}
 
 	private function markPaymentPaid(int $payment_id, string $confirmed_by): bool {
