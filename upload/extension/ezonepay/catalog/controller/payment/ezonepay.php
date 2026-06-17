@@ -273,9 +273,9 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 		}
 
 		$paid_amount = $this->getPaidAmount($detail);
-		$paid_by_status = $this->isSuccessfulPayment($detail) && $this->hasPaidAmount($detail) && $this->amountMatches($paid_amount, (float)$payment['amount']);
+		$paid_by_detail = $this->hasPaidAmount($detail) && $this->amountMatches($paid_amount, (float)$payment['amount']) && ($this->isSuccessfulPayment($detail) || $this->getUsageCount($detail) > 0);
 
-		if ($paid_by_status) {
+		if ($paid_by_detail) {
 			if (!$this->markPaymentPaid((int)$payment['ezonepay_payment_id'], 'payment-link-detail-polling')) {
 				return $this->currentPaymentStateResponse($order_info, (int)$payment['ezonepay_payment_id']);
 			}
@@ -525,6 +525,14 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 		return $this->toFloat($data['amount'] ?? $data['Amount'] ?? $data['paidAmount'] ?? $data['PaidAmount'] ?? $data['totalAmountPaid'] ?? $data['TotalAmountPaid'] ?? 0);
 	}
 
+	private function getUsageCount($data): int {
+		if (!is_array($data)) {
+			return 0;
+		}
+
+		return (int)$this->toFloat($data['currentUsageCount'] ?? $data['CurrentUsageCount'] ?? $data['usageCount'] ?? $data['UsageCount'] ?? 0);
+	}
+
 	private function isSuccessfulTransaction($transaction): bool {
 		if (!is_array($transaction)) {
 			return false;
@@ -532,7 +540,7 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 
 		$status = strtolower((string)($transaction['status'] ?? $transaction['Status'] ?? $transaction['paymentStatus'] ?? $transaction['PaymentStatus'] ?? ''));
 
-		return in_array($status, ['paid', 'success', 'succeeded', 'completed', 'approved', 'captured'], true);
+		return in_array($status, ['paid', 'success', 'succeeded', 'completed', 'approved', 'captured'], true) || !empty($transaction['paidAt']) || !empty($transaction['PaidAt']);
 	}
 
 	private function isSuccessfulPayment($payment): bool {
