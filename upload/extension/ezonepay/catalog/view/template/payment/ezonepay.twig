@@ -1,0 +1,33 @@
+<fieldset id="ezonepay-payment"
+  data-create-url="{{ create }}"
+  data-status-url="{{ status }}"
+  data-qr-base="{{ qr_base }}"
+  data-text-waiting="{{ text_waiting }}"
+  data-text-paid="{{ text_paid }}"
+  data-error-timeout="{{ error_timeout }}">
+  <legend>{{ heading_title }}</legend>
+  <p>{{ text_description }}</p>
+  <div class="border rounded p-3 mb-3 d-none" data-ezonepay-panel>
+    <div class="row g-3 align-items-center">
+      <div class="col-md-auto text-center">
+        <img src="" alt="{{ heading_title }}" width="220" height="220" class="img-fluid border rounded p-2 bg-white" data-ezonepay-qr>
+      </div>
+      <div class="col">
+        <p class="mb-2"><strong>{{ text_scan }}</strong></p>
+        <dl class="row mb-3">
+          <dt class="col-sm-3">{{ text_reference }}</dt>
+          <dd class="col-sm-9" data-ezonepay-reference></dd>
+          <dt class="col-sm-3">{{ text_amount }}</dt>
+          <dd class="col-sm-9" data-ezonepay-amount></dd>
+        </dl>
+        <a href="#" target="_blank" rel="noopener" class="btn btn-outline-primary" data-ezonepay-link>{{ text_open_checkout }}</a>
+      </div>
+    </div>
+    <div class="alert alert-info mt-3 mb-0" data-ezonepay-status>{{ text_waiting }}</div>
+  </div>
+  <div class="alert alert-danger d-none" data-ezonepay-error></div>
+  <div class="text-end">
+    <button type="button" id="button-confirm" class="btn btn-primary">{{ button_pay }}</button>
+  </div>
+</fieldset>
+<script src="extension/ezonepay/catalog/view/javascript/ezonepay.js?v=4" type="text/javascript"></script>
