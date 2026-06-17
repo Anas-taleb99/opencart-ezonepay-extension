@@ -317,6 +317,12 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 				return $this->currentPaymentStateResponse($order_info, (int)$payment['ezonepay_payment_id']);
 			}
 
+			if ((int)$order_info['order_status_id'] === (int)$this->config->get('payment_ezonepay_paid_status_id')) {
+				$this->finishPaymentCompletion((int)$payment['ezonepay_payment_id']);
+
+				return $this->paidResponse();
+			}
+
 			$comment = sprintf($this->language->get('text_order_comment'), $payment['order_reference']);
 
 			if (!empty($payment['confirmed_by'])) {
