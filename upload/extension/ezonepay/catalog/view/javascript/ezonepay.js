@@ -77,7 +77,10 @@
     function poll(elements) {
         retries += 1;
 
-        post(elements.root.dataset.statusUrl, { ezonepay_payment_id: paymentId }).then(function (json) {
+        post(elements.root.dataset.statusUrl, {
+            ezonepay_payment_id: paymentId,
+            ezonepay_token: elements.root.dataset.token
+        }).then(function (json) {
             if (json.error) {
                 throw new Error(json.error);
             }
@@ -115,7 +118,9 @@
             clearError(elements);
             setLoading(elements, true);
 
-            post(elements.root.dataset.createUrl).then(function (json) {
+            post(elements.root.dataset.createUrl, {
+                ezonepay_token: elements.root.dataset.token
+            }).then(function (json) {
                 if (json.error) {
                     throw new Error(json.error);
                 }

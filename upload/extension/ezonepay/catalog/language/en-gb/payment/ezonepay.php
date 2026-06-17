@@ -19,6 +19,7 @@ $_['button_pay']           = 'Pay with Ezone Pay';
 
 // Error
 $_['error_order']          = 'Order could not be found!';
+$_['error_session']        = 'Your checkout session has expired. Please refresh the page and try again.';
 $_['error_payment_method'] = 'Ezone Pay is not the selected payment method!';
 $_['error_config']         = 'Ezone Pay is not configured. Please contact store support.';
 $_['error_api']            = 'Ezone Pay request failed. Please try again or contact support.';

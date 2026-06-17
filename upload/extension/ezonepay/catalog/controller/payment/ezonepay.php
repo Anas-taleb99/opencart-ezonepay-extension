@@ -16,6 +16,7 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 		$data['create'] = $this->url->link('extension/ezonepay/payment/ezonepay.create', 'language=' . $this->config->get('config_language'), true);
 		$data['status'] = $this->url->link('extension/ezonepay/payment/ezonepay.status', 'language=' . $this->config->get('config_language'), true);
 		$data['qr_base'] = '';
+		$data['token'] = $this->csrfToken();
 
 		return $this->load->view('extension/ezonepay/payment/ezonepay', $data);
 	}
@@ -120,6 +121,11 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 	}
 
 	private function getValidatedOrder(array &$json, bool $require_enabled = true): array {
+		if (!$this->hasValidCsrfToken()) {
+			$json['error'] = $this->language->get('error_session');
+			return [];
+		}
+
 		if (!isset($this->session->data['order_id'])) {
 			$json['error'] = $this->language->get('error_order');
 			return [];
@@ -151,6 +157,21 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 		}
 
 		return $order_info;
+	}
+
+	private function csrfToken(): string {
+		if (empty($this->session->data['ezonepay_token'])) {
+			$this->session->data['ezonepay_token'] = bin2hex(random_bytes(16));
+		}
+
+		return (string)$this->session->data['ezonepay_token'];
+	}
+
+	private function hasValidCsrfToken(): bool {
+		$expected = (string)($this->session->data['ezonepay_token'] ?? '');
+		$actual = (string)($this->request->post['ezonepay_token'] ?? '');
+
+		return $expected !== '' && $actual !== '' && hash_equals($expected, $actual);
 	}
 
 	private function getReusablePayment(int $order_id): array {
