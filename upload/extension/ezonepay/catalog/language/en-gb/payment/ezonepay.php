@@ -11,7 +11,7 @@ $_['text_waiting']         = 'Waiting for payment confirmation...';
 $_['text_paid']            = 'Payment confirmed. Redirecting...';
 $_['text_reference']       = 'Reference';
 $_['text_amount']          = 'Amount';
-$_['text_scan']            = 'Scan the QR code or open the payment link.';
+$_['text_scan']            = 'Open the payment link to complete your payment.';
 $_['text_order_comment']   = 'Ezone Pay reference: %s';
 
 // Button

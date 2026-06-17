@@ -15,7 +15,7 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 
 		$data['create'] = $this->url->link('extension/ezonepay/payment/ezonepay.create', 'language=' . $this->config->get('config_language'), true);
 		$data['status'] = $this->url->link('extension/ezonepay/payment/ezonepay.status', 'language=' . $this->config->get('config_language'), true);
-		$data['qr_base'] = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=';
+		$data['qr_base'] = '';
 
 		return $this->load->view('extension/ezonepay/payment/ezonepay', $data);
 	}
@@ -84,7 +84,7 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 
 		$json = [];
 
-		$order_info = $this->getValidatedOrder($json);
+		$order_info = $this->getValidatedOrder($json, false);
 		$payment_id = (int)($this->request->post['ezonepay_payment_id'] ?? 0);
 
 		if (!$json && !$payment_id) {
@@ -98,6 +98,8 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 				$json['error'] = $this->language->get('error_payment');
 			} elseif (in_array($payment['state'], ['paid', 'used'], true)) {
 				$json = $this->completeOrder($order_info, $payment);
+			} elseif ($payment['state'] === 'completing') {
+				$json = ['status' => 'pending'];
 			} else {
 				try {
 					$json = $this->verifyPayment($order_info, $payment);
@@ -112,7 +114,7 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 		$this->response->setOutput(json_encode($json));
 	}
 
-	private function getValidatedOrder(array &$json): array {
+	private function getValidatedOrder(array &$json, bool $require_enabled = true): array {
 		if (!isset($this->session->data['order_id'])) {
 			$json['error'] = $this->language->get('error_order');
 			return [];
@@ -130,6 +132,11 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 
 		if (!isset($this->session->data['payment_method']) || $this->session->data['payment_method']['code'] !== 'ezonepay.ezonepay') {
 			$json['error'] = $this->language->get('error_payment_method');
+			return [];
+		}
+
+		if ($require_enabled && !$this->config->get('payment_ezonepay_status')) {
+			$json['error'] = $this->language->get('error_config');
 			return [];
 		}
 
@@ -201,10 +208,13 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 		}
 
 		$paid_amount = $this->getPaidAmount($detail);
-		$paid_by_status = $this->isSuccessfulPayment($detail) && (!$paid_amount || $this->amountMatches($paid_amount, (float)$payment['amount']));
+		$paid_by_status = $this->isSuccessfulPayment($detail) && $this->hasPaidAmount($detail) && $this->amountMatches($paid_amount, (float)$payment['amount']);
 
-		if ($this->amountMatches($paid_amount, (float)$payment['amount']) || $paid_by_status) {
-			$this->markPaymentPaid((int)$payment['ezonepay_payment_id'], 'payment-link-detail-polling');
+		if ($paid_by_status) {
+			if (!$this->markPaymentPaid((int)$payment['ezonepay_payment_id'], 'payment-link-detail-polling')) {
+				return $this->currentPaymentStateResponse($order_info, (int)$payment['ezonepay_payment_id']);
+			}
+
 			$payment['state'] = 'paid';
 			$payment['confirmed_by'] = 'payment-link-detail-polling';
 
@@ -221,7 +231,10 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 		}
 
 		if ($this->amountMatches($transaction_paid_amount, (float)$payment['amount'])) {
-			$this->markPaymentPaid((int)$payment['ezonepay_payment_id'], 'payment-link-transactions-polling');
+			if (!$this->markPaymentPaid((int)$payment['ezonepay_payment_id'], 'payment-link-transactions-polling')) {
+				return $this->currentPaymentStateResponse($order_info, (int)$payment['ezonepay_payment_id']);
+			}
+
 			$payment['state'] = 'paid';
 			$payment['confirmed_by'] = 'payment-link-transactions-polling';
 
@@ -235,14 +248,23 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 		$this->load->model('checkout/order');
 
 		if ($payment['state'] !== 'used') {
+			if (!$this->reservePaymentCompletion((int)$payment['ezonepay_payment_id'])) {
+				return $this->currentPaymentStateResponse($order_info, (int)$payment['ezonepay_payment_id']);
+			}
+
 			$comment = sprintf($this->language->get('text_order_comment'), $payment['order_reference']);
 
 			if (!empty($payment['confirmed_by'])) {
 				$comment .= "\nConfirmed by: " . $payment['confirmed_by'];
 			}
 
-			$this->model_checkout_order->addHistory((int)$order_info['order_id'], (int)$this->config->get('payment_ezonepay_paid_status_id'), $comment, false);
-			$this->db->query("UPDATE `" . DB_PREFIX . "ezonepay_payment` SET `state` = 'used', `date_modified` = NOW() WHERE `ezonepay_payment_id` = '" . (int)$payment['ezonepay_payment_id'] . "'");
+			try {
+				$this->model_checkout_order->addHistory((int)$order_info['order_id'], (int)$this->config->get('payment_ezonepay_paid_status_id'), $comment, false);
+				$this->finishPaymentCompletion((int)$payment['ezonepay_payment_id']);
+			} catch (\Throwable $e) {
+				$this->rollbackPaymentCompletion((int)$payment['ezonepay_payment_id']);
+				throw $e;
+			}
 		}
 
 		return [
@@ -373,7 +395,7 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 	}
 
 	private function extractItems($data): array {
-		if (is_array($data) && array_is_list($data)) {
+		if (is_array($data) && $this->isListArray($data)) {
 			return $data;
 		}
 
@@ -390,6 +412,10 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 		return [];
 	}
 
+	private function isListArray(array $data): bool {
+		return !$data || array_keys($data) === range(0, count($data) - 1);
+	}
+
 	private function getReference($data): string {
 		if (!is_array($data)) {
 			return '';
@@ -403,7 +429,21 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 			return 0.0;
 		}
 
-		return $this->toFloat($data['totalAmountPaid'] ?? $data['TotalAmountPaid'] ?? $data['paidAmount'] ?? $data['PaidAmount'] ?? $data['amountPaid'] ?? $data['AmountPaid'] ?? $data['amount'] ?? $data['Amount'] ?? 0);
+		return $this->toFloat($data['totalAmountPaid'] ?? $data['TotalAmountPaid'] ?? $data['paidAmount'] ?? $data['PaidAmount'] ?? $data['amountPaid'] ?? $data['AmountPaid'] ?? 0);
+	}
+
+	private function hasPaidAmount($data): bool {
+		if (!is_array($data)) {
+			return false;
+		}
+
+		foreach (['totalAmountPaid', 'TotalAmountPaid', 'paidAmount', 'PaidAmount', 'amountPaid', 'AmountPaid'] as $key) {
+			if (array_key_exists($key, $data)) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	private function getTransactionAmount($data): float {
@@ -442,8 +482,47 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 		return is_numeric($value) ? (float)$value : 0.0;
 	}
 
-	private function markPaymentPaid(int $payment_id, string $confirmed_by): void {
-		$this->db->query("UPDATE `" . DB_PREFIX . "ezonepay_payment` SET `state` = 'paid', `confirmed_by` = '" . $this->db->escape($confirmed_by) . "', `date_modified` = NOW() WHERE `ezonepay_payment_id` = '" . (int)$payment_id . "'");
+	private function markPaymentPaid(int $payment_id, string $confirmed_by): bool {
+		$this->db->query("UPDATE `" . DB_PREFIX . "ezonepay_payment` SET `state` = 'paid', `confirmed_by` = '" . $this->db->escape($confirmed_by) . "', `date_modified` = NOW() WHERE `ezonepay_payment_id` = '" . (int)$payment_id . "' AND `state` = 'pending'");
+
+		return $this->db->countAffected() > 0;
+	}
+
+	private function reservePaymentCompletion(int $payment_id): bool {
+		$this->db->query("UPDATE `" . DB_PREFIX . "ezonepay_payment` SET `state` = 'completing', `date_modified` = NOW() WHERE `ezonepay_payment_id` = '" . (int)$payment_id . "' AND `state` = 'paid'");
+
+		return $this->db->countAffected() > 0;
+	}
+
+	private function finishPaymentCompletion(int $payment_id): void {
+		$this->db->query("UPDATE `" . DB_PREFIX . "ezonepay_payment` SET `state` = 'used', `date_modified` = NOW() WHERE `ezonepay_payment_id` = '" . (int)$payment_id . "' AND `state` = 'completing'");
+	}
+
+	private function rollbackPaymentCompletion(int $payment_id): void {
+		$this->db->query("UPDATE `" . DB_PREFIX . "ezonepay_payment` SET `state` = 'paid', `date_modified` = NOW() WHERE `ezonepay_payment_id` = '" . (int)$payment_id . "' AND `state` = 'completing'");
+	}
+
+	private function currentPaymentStateResponse(array $order_info, int $payment_id): array {
+		$current = $this->getPayment($payment_id);
+
+		if ($current && (int)$current['order_id'] === (int)$order_info['order_id']) {
+			if ($current['state'] === 'paid') {
+				return $this->completeOrder($order_info, $current);
+			}
+
+			if ($current['state'] === 'used') {
+				return $this->paidResponse();
+			}
+		}
+
+		return ['status' => 'pending'];
+	}
+
+	private function paidResponse(): array {
+		return [
+			'status' => 'paid',
+			'redirect' => $this->url->link('checkout/success', 'language=' . $this->config->get('config_language'), true)
+		];
 	}
 
 	private function logApiError(string $message): void {

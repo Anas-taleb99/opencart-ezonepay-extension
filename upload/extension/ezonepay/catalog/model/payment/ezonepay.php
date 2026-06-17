@@ -5,7 +5,9 @@ class Ezonepay extends \Opencart\System\Engine\Model {
 	public function getMethods(array $address = []): array {
 		$this->load->language('extension/ezonepay/payment/ezonepay');
 
-		if ($this->cart->hasSubscription()) {
+		if (!$this->config->get('payment_ezonepay_status')) {
+			$status = false;
+		} elseif ($this->cart->hasSubscription()) {
 			$status = false;
 		} elseif (!$this->config->get('config_checkout_payment_address')) {
 			$status = true;
@@ -14,7 +16,7 @@ class Ezonepay extends \Opencart\System\Engine\Model {
 		} else {
 			$this->load->model('localisation/geo_zone');
 
-			$results = $this->model_localisation_geo_zone->getGeoZone((int)$this->config->get('payment_ezonepay_geo_zone_id'), (int)$address['country_id'], (int)$address['zone_id']);
+			$results = $this->model_localisation_geo_zone->getGeoZone((int)$this->config->get('payment_ezonepay_geo_zone_id'), (int)($address['country_id'] ?? 0), (int)($address['zone_id'] ?? 0));
 
 			$status = (bool)$results;
 		}

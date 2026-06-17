@@ -43,6 +43,25 @@
         elements.button.classList.toggle('disabled', loading);
     }
 
+    function setQr(elements, link) {
+        var wrapper = elements.qr.closest('.col-md-auto');
+
+        if (!elements.root.dataset.qrBase) {
+            if (wrapper) {
+                wrapper.classList.add('d-none');
+            }
+
+            elements.qr.removeAttribute('src');
+            return;
+        }
+
+        if (wrapper) {
+            wrapper.classList.remove('d-none');
+        }
+
+        elements.qr.src = elements.root.dataset.qrBase + encodeURIComponent(link);
+    }
+
     function post(url, data) {
         return fetch(url, {
             method: 'POST',
@@ -110,7 +129,7 @@
                 elements.reference.textContent = json.order_reference;
                 elements.amount.textContent = json.amount;
                 elements.link.href = json.link;
-                elements.qr.src = elements.root.dataset.qrBase + encodeURIComponent(json.link);
+                setQr(elements, json.link);
                 elements.panel.classList.remove('d-none');
                 elements.status.textContent = elements.root.dataset.textWaiting;
                 retries = 0;

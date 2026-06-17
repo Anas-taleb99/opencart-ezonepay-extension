@@ -32,3 +32,4 @@ $_['help_debug']                    = 'Writes failed Ezone Pay response details 
 $_['error_permission']              = 'Warning: You do not have permission to modify Ezone Pay payment!';
 $_['error_dev_api_key']             = 'Development API Key is required when using Development mode!';
 $_['error_production_api_key']      = 'Production API Key is required when using Production mode!';
+$_['error_statuses']                = 'Pending and paid order statuses must be different.';
