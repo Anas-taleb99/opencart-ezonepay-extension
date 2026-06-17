@@ -129,6 +129,8 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 			KEY `state` (`state`)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+		$this->ensureUniqueOrderIndex();
+
 		$this->load->model('setting/setting');
 
 		$this->model_setting_setting->editSetting('payment_ezonepay', [
@@ -156,5 +158,30 @@ class Ezonepay extends \Opencart\System\Engine\Controller {
 		$status_id = (int)$this->config->get('config_complete_status_id');
 
 		return $status_id ?: 5;
+	}
+
+	private function ensureUniqueOrderIndex(): void {
+		$table = DB_PREFIX . 'ezonepay_payment';
+		$duplicates = $this->db->query("SELECT COUNT(*) AS `total` FROM (SELECT `order_id` FROM `" . $table . "` GROUP BY `order_id` HAVING COUNT(*) > 1) duplicate_orders");
+
+		if ((int)$duplicates->row['total'] > 0) {
+			return;
+		}
+
+		$index = $this->db->query("SHOW INDEX FROM `" . $table . "` WHERE `Key_name` = 'order_id'");
+
+		if ($index->row && (int)$index->row['Non_unique'] === 0) {
+			return;
+		}
+
+		try {
+			if ($index->row) {
+				$this->db->query("ALTER TABLE `" . $table . "` DROP INDEX `order_id`");
+			}
+
+			$this->db->query("ALTER TABLE `" . $table . "` ADD UNIQUE KEY `order_id` (`order_id`)");
+		} catch (\Throwable $e) {
+			$this->log->write('Ezone Pay install: unable to add unique order index: ' . $e->getMessage());
+		}
 	}
 }
