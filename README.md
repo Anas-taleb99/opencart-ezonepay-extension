@@ -142,22 +142,23 @@ Privacy policy: https://ezonepay.ly/ar/privacy
 ## Publishing
 
 OpenCart extension packages are uploaded as `.ocmod.zip` files. The package
-should contain the `upload` directory at the archive root:
+should contain `install.json`, `admin`, and `catalog` at the archive root.
+OpenCart installs these files under `extension/ezonepay/`.
 
 ```text
 ezonepay.ocmod.zip
-└── upload/
-    └── extension/
-        └── ezonepay/
-            ├── admin/
-            ├── catalog/
-            └── install.json
+├── install.json
+├── admin/
+└── catalog/
 ```
 
 From this repository, you can build the upload package with:
 
 ```bash
-zip -r ezonepay.ocmod.zip upload
+rm -f ezonepay.ocmod.zip
+zip -r ezonepay.ocmod.zip install.json
+cd upload/extension/ezonepay
+zip -r ../../../ezonepay.ocmod.zip admin catalog
 ```
 
 Before publishing publicly:

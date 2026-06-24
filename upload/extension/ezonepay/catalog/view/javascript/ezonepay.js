@@ -107,55 +107,59 @@
         });
     }
 
-    function bind(root) {
-        var elements = getElements(root);
-
-        if (!elements || elements.root.dataset.ezonepayBound === '1') {
+    function startPayment(elements) {
+        if (!elements || elements.root.dataset.ezonepayLoading === '1') {
             return;
         }
 
-        elements.root.dataset.ezonepayBound = '1';
+        elements.root.dataset.ezonepayLoading = '1';
+        clearError(elements);
+        setLoading(elements, true);
 
-        elements.button.addEventListener('click', function (event) {
-            event.preventDefault();
-            clearError(elements);
-            setLoading(elements, true);
+        post(elements.root.dataset.createUrl, {
+            ezonepay_token: elements.root.dataset.token
+        }).then(function (json) {
+            if (json.error) {
+                throw new Error(json.error);
+            }
 
-            post(elements.root.dataset.createUrl, {
-                ezonepay_token: elements.root.dataset.token
-            }).then(function (json) {
-                if (json.error) {
-                    throw new Error(json.error);
-                }
+            if (json.redirect) {
+                window.location.href = json.redirect;
+                return;
+            }
 
-                if (json.redirect) {
-                    window.location.href = json.redirect;
-                    return;
-                }
+            paymentId = json.ezonepay_payment_id;
+            elements.reference.textContent = json.order_reference;
+            elements.amount.textContent = json.amount;
+            elements.link.href = json.link;
+            setQr(elements, json.link);
+            elements.panel.classList.remove('d-none');
+            elements.status.textContent = elements.root.dataset.textWaiting;
+            retries = 0;
 
-                paymentId = json.ezonepay_payment_id;
-                elements.reference.textContent = json.order_reference;
-                elements.amount.textContent = json.amount;
-                elements.link.href = json.link;
-                setQr(elements, json.link);
-                elements.panel.classList.remove('d-none');
-                elements.status.textContent = elements.root.dataset.textWaiting;
-                retries = 0;
+            if (pollTimer) {
+                window.clearInterval(pollTimer);
+            }
 
-                if (pollTimer) {
-                    window.clearInterval(pollTimer);
-                }
-
-                pollTimer = window.setInterval(function () {
-                    poll(elements);
-                }, 5000);
+            pollTimer = window.setInterval(function () {
                 poll(elements);
-            }).catch(function (caught) {
-                showError(elements, caught.message || String(caught));
-                setLoading(elements, false);
-            });
+            }, 5000);
+            poll(elements);
+        }).catch(function (caught) {
+            showError(elements, caught.message || String(caught));
+            setLoading(elements, false);
+            elements.root.dataset.ezonepayLoading = '0';
         });
     }
 
-    document.querySelectorAll('#ezonepay-payment').forEach(bind);
+    document.addEventListener('click', function (event) {
+        var button = event.target.closest && event.target.closest('#ezonepay-payment #button-confirm');
+
+        if (!button) {
+            return;
+        }
+
+        event.preventDefault();
+        startPayment(getElements(button.closest('#ezonepay-payment')));
+    });
 }());
